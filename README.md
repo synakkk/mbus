@@ -25,7 +25,7 @@ Devices with lower IDs are prioritized, granting them precedence in transmission
 
 ## Hardware setup
 Connect the RS485 transceiver to the UART port of the microcontroller along with two transistors - one for pulling the additional line to ground, and the other for reading the state of the line. You can refer to the provided schematic for proper connections. 
-> [Important]
+> [!Important]
 > Ensure that the line is pulled up to VBUS with a resistor but is not protected by a fuse.
 
 ## Pheriperial configuration
