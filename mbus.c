@@ -934,7 +934,7 @@ void mbus_master_prepare_Write_Coil_RW(uint8_t tab, uint8_t id, uint8_t address,
 	mbus_TX[tab].data[0] = device_id;
 	mbus_TX[tab].data[1] = id;
 	mbus_TX[tab].data[2] = 7+len;
-	mbus_TX[tab].data[3] = Read_Coil_RW;
+	mbus_TX[tab].data[3] = Write_Coil_RW;
 	mbus_TX[tab].data[4] = address;
 
 	for(uint8_t x = 0; x<len; x++) {
@@ -963,7 +963,7 @@ void mbus_master_prepare_Write_Reg_RW(uint8_t tab, uint8_t id, uint8_t address, 
 	mbus_TX[tab].data[0] = device_id;
 	mbus_TX[tab].data[1] = id;
 	mbus_TX[tab].data[2] = 7+(len*2);
-	mbus_TX[tab].data[3] = Read_Reg_RW;
+	mbus_TX[tab].data[3] = Write_Reg_RW;
 	mbus_TX[tab].data[4] = address;
 
 	for(uint8_t x = 0; x<len; x++) {
