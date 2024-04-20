@@ -3,12 +3,18 @@
 ## *Project is still under development, if you have any feedback or notice any errors, please feel free to inform me.*
 
 ## Table of contents
-* [General info] (#general-info)
-* [Hardware setup] (#hardware-steup)
-* [Pheriperial configuration] (#pheriperial-configuration)
-* [mbus configuration] (#mbus-configuration)
-* [Usage] (#usage)
-* [Adding new functions] (#adding-new-functions)
+* [General info](#general-info)
+* [Hardware setup](#hardware-setup)
+* [Pheriperial configuration](#pheriperial-configuration)
+	- [USART](#usart)
+	- [GPIO](#gpio)
+	- [Timer](#timer)
+* [mbus configuration](#mbus-configuration)
+	- [Initialization](#initialization)
+	- [Sending data](#sending-data)
+* [Usage](#usage)
+* [Adding new functions](#adding-new-functions)
+
 
 ## General info
 mbus is a versatile serial communication library designed for embedded systems, specifically tailored for STM32 microcontrollers with Cortex-M architecture. Drawing inspiration from Modbus, it introduces a novel feature allowing any device to become a master through arbitration. This unique capability enables flexible and decentralized communication, making it ideal for applications requiring dynamic control over serial communication.
