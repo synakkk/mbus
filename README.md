@@ -163,6 +163,7 @@ mbus_master_prepare_Command_0(uint8_t tab, uint8_t id);
 ```
 
 Where:
+
 `tab` - specifies the request number (mbus_TX[tab].data[])
 
 `id` - the ID of the device to which the data is addressed
@@ -174,6 +175,25 @@ Where:
 `*buf` - buffer containing the data to be transmitted
 
 `len` - the number of data from the buffer to transmit
+
+
+**How does the data frame look like?**
+
+| Byte | Master TX | Slave RSP 			|Byte 	| Master TX | Slave RSP 			| Byte 	| Master TX |
+| :----: | :--------: | :--------:  		| :----: | :--------: | :--------:  			| :----: | :--------: |
+| | **Read_Coil_R** 	|  			| | **Read_Reg_R** |  				| | **Write_Reg_RW** |
+| byte 0 | Device ID 	| Slave ID 		| byte 0 | Device ID 		| Slave ID 		| byte 0 | Device ID |
+| byte 1 | Slave ID 	| Master ID 		| byte 1 | Slave ID 		| Master ID 		| byte 1 | Slave ID |
+| byte 2 | Frame lenght = 8| Frame lenght = 10 	| byte 2 | Frame lenght = 8 	| Frame lenght = 11	| byte 2 | Frame lenght = 11|
+| byte 3 | Function code | mbus.Coil_R[2] 	| byte 3 | Function code 	| mbus.Reg_R[10] H 	| byte 3 | Function Code |
+| byte 4 | Address = 2 	| mbus.Coil_R[3] 	| byte 4 | Address = 10 	| mbus.Reg_R[10] L 	| byte 4 | Address |
+| byte 5 | Count = 5 	| mbus.Coil_R[4] 	| byte 5 | Count = 3 		| mbus.Reg_R[11] H 	| byte 5 | VAL1 H |
+| byte 6 | CRC H 	| mbus.Coil_R[5] 	| byte 6 | CRC H		| mbus.Reg_R[11] L 	| byte 6 | VAL1 L |
+| byte 7 | CRC L 	| mbus.Coil_R[6] 	| byte 7 | CRC L		| mbus.Reg_R[12] H 	| byte 7 | VAL2 H |
+| byte 8 | 		| CRC H 		| byte 8 |			| mbus.Reg_R[12] L 	| byte 8 | VAL2 L |
+| byte 9 | 		| CRC L 		| byte 9 |			| CRC H 		| byte 9 | CRC H |
+| byte 10 | 		|			|	 |			| CRC L 		| byte 10| CRC L |
+
 
 #### Example of use
 
@@ -188,3 +208,37 @@ mbus_master_prepare_Read_Reg_R(1, 120, 3, 3);
 uint16_t data[] = {0x2B10, 0xC63F, 0xA300, 0x897C, 0x0008};
 mbus_master_prepare_Write_Reg_RW(2, 34, 10, data, 5);
 ```
+
+**To send data use this function:**
+```c
+mbus_new_connection();
+```
+If no other device is currently transmitting, an arbitration process begins to prevent situations where two devices attempt to initiate transmission simultaneously. Upon winning the arbitration, the data from the transmit buffer is sent.
+You can check the current transmission status using the function:
+```c
+// getting status
+uint8_t status = mbus_get_connection_status();
+// or wait until the transmission is completed.
+while(mbus_get_connection_status());
+```
+
+The function returns `MBUS_CONNECTION_REQUEST` (0x01) if the data has not been sent yet (i.e., either it is being transmitted or another device is still communicating) or returns `MBUS_CONNECTION_FREE` (0x00) if the data has already been sent and the transmission is complete.
+
+The received data from the slave is stored in `mbus_mRSP[tab].data[]`.
+
+`mbus_mRSP[tab].completed` - Flag indicating that the data has been fully received.
+
+`mbus_mRSP[tab].data_len` - Number of bytes received.
+
+`mbus_TX[tab].status` ` Flag indicating a response from the slave.
+
+List of statuses:
+
+`MBUS_CALL_BUF_FREE` - The data has been sent, and no response was required.
+
+`MBUS_CALL_BUF_RESP` - The response from the slave has been received and is stored in the buffer mbus_mRSP[tab].data[]
+
+`MBUS_CALL_BUF_ACK` - The data has been received and acknowledged by the slave.
+
+`MBUS_CALL_BUF_ERR` - The slave does not respond, and the maximum number of attempts has been exceeded.
+
