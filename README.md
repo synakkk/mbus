@@ -1,4 +1,16 @@
 # mbus v1.0
+
+## *Project is still under development, if you have any feedback or notice any errors, please feel free to inform me.*
+
+## Table of contents
+* [General info] (#general-info)
+* [Hardware setup] (#hardware-steup)
+* [Pheriperial configuration] (#pheriperial-configuration)
+* [mbus configuration] (#mbus-configuration)
+* [Usage] (#usage)
+* [Adding new functions] (#adding-new-functions)
+
+## General info
 mbus is a versatile serial communication library designed for embedded systems, specifically tailored for STM32 microcontrollers with Cortex-M architecture. Drawing inspiration from Modbus, it introduces a novel feature allowing any device to become a master through arbitration. This unique capability enables flexible and decentralized communication, making it ideal for applications requiring dynamic control over serial communication.
 
 The protocol employs an additional line, in conjunction with the RS485 line, for arbitration. When this line is high, a device seeking master status pulls it low, waits for a specified duration, and then releases it. It subsequently checks the line's state: if it remains high, indicating a successful arbitration, the device becomes the master and pulls the line low again. This prevents other devices connected to the line from becoming masters.
@@ -7,7 +19,8 @@ Devices with lower IDs are prioritized, granting them precedence in transmission
 
 ## Hardware setup
 Connect the RS485 transceiver to the UART port of the microcontroller along with two transistors - one for pulling the additional line to ground, and the other for reading the state of the line. You can refer to the provided schematic for proper connections. 
-Important: Ensure that the line is pulled up to VBUS with a resistor but is not protected by a fuse.
+> [Important]
+> Ensure that the line is pulled up to VBUS with a resistor but is not protected by a fuse.
 
 ## Pheriperial configuration
 ### USART
@@ -17,11 +30,12 @@ Frame Configuration:
  - Parity: None
  - Stop Bits: 1
 
-Don't forget to enable USART interrupts in the NVIC
+> [!TIP]
+> Don't forget to enable USART interrupts in the NVIC
 ### GPIO
-Pin INT0_R is used to read the state of the line, with an interrupt triggered by the rising edge. Don't forget to enable interrupts in the NVIC.
+**Pin INT0_R** is used to read the state of the line, with an interrupt triggered by the **rising edge**. Don't forget to enable interrupts in the NVIC.
 
-Pin INT0_W is used to pull the line low and is configured as GPIO_OUTPUT.
+**Pin INT0_W** is used to pull the line low and is configured as **GPIO_OUTPUT**.
 
 ### Timer
 
@@ -35,7 +49,12 @@ For example - TIM17 (16MHz):
 - Internal Clock Division 0
 - Auto-reload preload Disable
 
-Don't forget to enable interrupts in the NVIC.
+> [!TIP]
+> Don't forget to enable interrupts in the NVIC.
+
+> [!WARNING]
+> mbus uses SysTick, which is configured to generate interrupts every 1 millisecond.
+> If your project has different settings, you need to adjust the function `void mbus_delay_500us(void)` located in the `mbus.c` file.
 
 
 ## mbus configuration
@@ -69,8 +88,8 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
 	if(huart == &MBUS_UART) mbus_RX_interrupt();
 }
 ```
-Tip:
-If you're testing devices, you can use HAL_GPIO_EXTI_Falling_Callback and connect two devices without input transistors, but output transistors are necessery. Code is prepared for that.
+> [Tip]
+> If you're testing devices, you can use HAL_GPIO_EXTI_Falling_Callback and connect two devices without input transistors, but output transistors are necessery. Code is prepared for that.
 
 6.  Open file `mbus.c` and enter your code in this functions if it's needed:
 ```c
@@ -242,3 +261,127 @@ List of statuses:
 
 `MBUS_CALL_BUF_ERR` - The slave does not respond, and the maximum number of attempts has been exceeded.
 
+## Adding new functions
+
+**1. Add the function name to the `enum` in `mbus.h`**
+```c
+enum
+{
+	Read_Coil_R = 0x01,
+	Read_Coil_RW = 0x02,
+	Read_Reg_R = 0x11,
+	Read_Reg_RW = 0x12,
+	Write_Coil_RW = 0x22,
+	Write_Reg_RW = 0x32,
+	Command_0 = 0x50,
+	Command_1 = 0x51,
+	/*
+	 * You can add here your functions.
+	 */
+	YOUR_FUNCTION_NAME = YOUR_FUNCTION_VALUE
+};
+```
+
+**2. Prepare a function that executes your feature.**
+
+If you need to response with data:
+```c
+void exec_YOUR_FUNCTION(void) {
+	// If your function needs to respod master prepare data to transmit
+	mbus_RSP.data[0] = device_id;		// Set device ID
+	mbus_RSP.data[1] = mbus_RX.data[0];	// Set master address
+	mbus_RSP.data[2] = //LENGHT// n+3 //
+
+	// Put your data here
+	mbus_RSP.data[3] .... mbus_RSP.data[n] = //YOUR DATA//
+
+	// Calculate CRC
+	uint16_t CRC_calc = mbus_crc(mbus_RSP.data, mbus_RSP.data[2]-2);
+	CRCH = CRC_calc >> 8;
+	CRCL = CRC_calc & 0x00FF;
+
+	// Set CRC values in the response packet
+	mbus_RSP.data[n+1] = CRCH
+	mbus_RSP.data[n+2] = CRCL;
+
+	// Set response ready flag
+	rsp_ready_flag = MBUS_RESPONSE_READY;
+}
+```
+
+If you need to respose with ACK:
+```c
+void exec_YOUR_FUNCTION(void) {
+	// Send ACK to master
+	mbus_slave_ack();
+
+	/*
+	*	Received data from master stored shortly in mbus_RX.data[]
+	*/
+}
+```
+
+**3. Add a new entry in the switch loop in the function `void mbus_exec_frame(void)` in `mbus.c`**
+
+```c
+switch(function_code) {
+	case Read_Coil_R:
+		if((mbus_RX.data[4] + mbus_RX.data[2] - 7) <= MBUS_COIL_R_COUNT) mbus_exec_Read_Coil_R();
+		break;
+	case Read_Coil_RW:
+		if((mbus_RX.data[4] + mbus_RX.data[2] - 7) <= MBUS_COIL_RW_COUNT) mbus_exec_Read_Coil_RW();
+		break;
+	case Read_Reg_R:
+		if((mbus_RX.data[4] + mbus_RX.data[2] - 7) <= MBUS_REG_R_COUNT) mbus_exec_Read_Reg_R();
+		break;
+	case Read_Reg_RW:
+		if((mbus_RX.data[4] + mbus_RX.data[2] - 7) <= MBUS_REG_RW_COUNT) mbus_exec_Read_Reg_RW();
+		break;
+	case Write_Coil_RW:
+		if((mbus_RX.data[4] + mbus_RX.data[2] - 7) <= MBUS_COIL_RW_COUNT) mbus_exec_Write_Coil_RW();
+		break;
+	case Write_Reg_RW:
+		if((mbus_RX.data[4] + mbus_RX.data[2] - 7) <= MBUS_REG_RW_COUNT) mbus_exec_Write_Reg_RW();
+		break;
+	/*
+	 * You can add here your functions
+	 */
+
+	case YOUR_FUNCTION_NAME:
+		exec_YOUR_FUNCTION();
+		break;
+
+	}
+```
+
+In this case code `if((mbus_RX.data[4] + mbus_RX.data[2] - 7) <= MBUS_COIL_R_COUNT)` checks if the requested operation does not exceed the bounds of the data array.
+
+**4. Prepare a function that will prepare the data for transmission.**
+```c
+void master_prepare_YOUR_FUNCTION_NAME(uint8_t tab, uint8_t id, YOUR VARIABLES) {
+	mbus_TX[tab].data[0] = device_id;
+	mbus_TX[tab].data[1] = id;
+	mbus_TX[tab].data[2] = // LENGHT // n+3 //
+	mbus_TX[tab].data[3] = YOUR_FUNCTION_NAME;
+
+	//If necessary, you can insert your variables here
+	mbus_TX[tab].data[4] ... mbus_TX[tab].data[n]
+
+	// Calculate CRC
+	uint16_t CRC_calc = mbus_crc(mbus_TX[tab].data, mbus_TX[tab].data[2]-2);
+	CRCH = CRC_calc >> 8;
+	CRCL = CRC_calc & 0x00FF;
+
+	// Set CRC values in the response packet
+	mbus_TX[tab].data[n+1] = CRCH
+	mbus_TX[tab].data[n+2] = CRCL;
+
+	//Choose the slave's response
+	mbus_TX[tab].rsp = MBUS_RSP_DATA;
+	//mbus_TX[tab].rsp = MBUS_RSP_ACK;
+	//mbus_TX[tab].rsp = MBUS_RSP_NONE;
+
+	//Set the frame status to ready for transmission
+	mbus_TX[tab].status = MBUS_CALL_BUF_READY;
+}
+```
