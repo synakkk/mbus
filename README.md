@@ -1,2 +1,190 @@
-# mbus
-mbus is a versatile serial communication library for embedded systems. Inspired by Modbus, it introduces a unique feature where any device can become the master through arbitration, enabling flexible and decentralized communication.
+# mbus v1.0
+mbus is a versatile serial communication library designed for embedded systems, specifically tailored for STM32 microcontrollers with Cortex-M architecture. Drawing inspiration from Modbus, it introduces a novel feature allowing any device to become a master through arbitration. This unique capability enables flexible and decentralized communication, making it ideal for applications requiring dynamic control over serial communication.
+
+The protocol employs an additional line, in conjunction with the RS485 line, for arbitration. When this line is high, a device seeking master status pulls it low, waits for a specified duration, and then releases it. It subsequently checks the line's state: if it remains high, indicating a successful arbitration, the device becomes the master and pulls the line low again. This prevents other devices connected to the line from becoming masters.
+
+Devices with lower IDs are prioritized, granting them precedence in transmission.
+
+## Hardware setup
+Connect the RS485 transceiver to the UART port of the microcontroller along with two transistors - one for pulling the additional line to ground, and the other for reading the state of the line. You can refer to the provided schematic for proper connections. 
+Important: Ensure that the line is pulled up to VBUS with a resistor but is not protected by a fuse.
+
+## Pheriperial configuration
+### USART
+Frame Configuration:
+ - Baud Rate: Recommended maximum speed is 9600 baud
+ - Data Bits: 8 bits
+ - Parity: None
+ - Stop Bits: 1
+
+Don't forget to enable USART interrupts in the NVIC
+### GPIO
+Pin INT0_R is used to read the state of the line, with an interrupt triggered by the rising edge. Don't forget to enable interrupts in the NVIC.
+
+Pin INT0_W is used to pull the line low and is configured as GPIO_OUTPUT.
+
+### Timer
+
+Configure timer to generete period interrupts every 1ms.
+For example - TIM17 (16MHz):
+
+- Prescaler 0
+- Counter Mode Up
+- Counter period 15999 ((f_timer / 1000) - 1)
+- RCR 0
+- Internal Clock Division 0
+- Auto-reload preload Disable
+
+Don't forget to enable interrupts in the NVIC.
+
+
+## mbus configuration
+1.  Include file `mbus.h` in `main.c`.
+ ```c
+#include "mbus.h"
+```
+2.  Open file `mbus_config.h` and configure transmission parameters.
+    In this file you can change timeout values, synchronization time, time between calls and more.
+    There is one parameter called `#define MBUS_ONE_BYTE_TX_TIME_MS`, enter here the duration of one UART byte rounded up to milliseconds.
+   
+4.  Open file `mbus_device_config.h` and configure your device parameters.
+    In `#define MBUS_TIMER` you can replace `&htim17` if you use another timer.
+    The same with `#define MBUS_UART &huart2`.
+    In this file also you can change number of read-write / read-only registers.
+   
+5.  Add interrupt handling in the `main.c` file:
+```c
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
+  if(htim == MBUS_TIMER) mbus_period_int();
+}
+
+void HAL_GPIO_EXTI_Rising_Callback(uint16_t GPIO_Pin) {
+  if(GPIO_Pin == //CHECK HERE WHICH PIN//) mbus_line0_interrupt();
+}
+
+void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart) {
+	if(huart == &MBUS_UART) mbus_TX_interrupt();
+}
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
+	if(huart == &MBUS_UART) mbus_RX_interrupt();
+}
+```
+Tip:
+If you're testing devices, you can use HAL_GPIO_EXTI_Falling_Callback and connect two devices without input transistors, but output transistors are necessery. Code is prepared for that.
+
+6.  Open file `mbus.c` and enter your code in this functions if it's needed:
+```c
+// Check line 0 status
+uint8_t mbus_check_line0(void);
+// Hold line 0
+void mbus_line0_hold(void);
+// Release line 0
+void mbus_line0_release(void);
+// Enable RS485 TX
+void mbus_RS485_TX_enable(void);
+// Disable RS485 TX
+void mbus_RS485_TX_disable(void);
+// Start MBus timer
+void mbus_timer_start(void);
+// Stop MBus timer
+void mbus_timer_stop(void);
+// Check MBus timer
+uint8_t mbus_timer_check(void);
+// Set RX interrupt
+void mbus_set_RX_interrupt(void);
+// Enable UART reception
+void mbus_enable_UART_reception(void);
+// Transmit data with interrupt
+void mbus_transmit_data_with_interrupt(void);
+// Transmit data with interrupt for master call
+void mbus_transmit_data_with_interrupt_master_call(void);
+// Transmit response data
+void mbus_TX_RSP(void);
+```
+
+## Usage
+
+### Initialization
+
+First thing you need to initialize mbus with following function:
+```c
+mbus_init(uint8_t id, uint8_t group, uint8_t wait_to_sync);
+```
+Where:
+- **id** - id of this device
+- **group** - id of this device group
+- **wait_to_sync** - parameter whether the function should wait for synchrozination (1) or program should continue execution without waiting
+
+If you need, you can use this function to check status of synchronization:
+```c
+mbus_check_status(void)
+```
+It returns 1 if device is synchronized.
+Timer will automatically turn on and turn off after synchronization. It will also automatically activate when any device becomes the master, and will automatically turn off after the transmission is completed.
+
+**From now on, the device will respond to calls addressed to its own address, group address, and address 0.**
+
+If you don't need group address, you can set it to 0.
+
+Store the data accessible to mbus in the `mbus` structure. These include the following arrays:
+
+- `mbus.Coil_R[]`: 8-bit array, readable only by other devices.
+- `mbus.Coil_RW[]`: 8-bit array, readable and writable by other devices.
+- `mbus.Reg_R[]`: 16-bit array, readable only by other devices.
+- `mbus.Reg_RW[]`: 16-bit array, readable and writable by other devices.
+
+
+### Sending data
+
+To initiate communication with another device, you need to prepare data for transmission.
+All requests are stored in `mbus_TX[MBUS_MASTER_CALLS_COUNT].data[]`. The parameter `MBUS_MASTER_CALLS_COUNT` determines the maximum number of requests the master can transmit in one session.
+The order of sending requests/commands is from 0 to "MBUS_MASTER_CALLS_COUNT - 1".
+
+For each request, an expected response is also established:
+
+`mbus_TX[x].rsp = MBUS_RSP_NONE` - no response, only broadcast
+
+`mbus_TX[x].rsp = MBUS_RSP_ACK` - response from the slave by pulling the line to ground (the Master briefly releases the line after sending)
+
+`mbus_TX[x].rsp = MBUS_RSP_DATA` - data from the slave are expected
+
+Once the data is prepared, set the status to `mbus_TX[x].status = MBUS_CALL_BUF_READY;`.
+
+
+**The following functions are provided for this purpose:**
+```c
+mbus_master_prepare_Read_Coil_R(uint8_t tab, uint8_t id, uint8_t address, uint8_t count);
+mbus_master_prepare_Read_Coil_RW(uint8_t tab, uint8_t id, uint8_t address, uint8_t count);
+mbus_master_prepare_Read_Reg_R(uint8_t tab, uint8_t id, uint8_t address, uint8_t count);
+mbus_master_prepare_Read_Reg_RW(uint8_t tab, uint8_t id, uint8_t address, uint8_t count);
+mbus_master_prepare_Write_Coil_RW(uint8_t tab, uint8_t id, uint8_t address, uint8_t *buf, uint8_t len);
+mbus_master_prepare_Write_Reg_RW(uint8_t tab, uint8_t id, uint8_t address, uint16_t *buf, uint8_t len);
+mbus_master_prepare_Command_0(uint8_t tab, uint8_t id);
+```
+
+Where:
+`tab` - specifies the request number (mbus_TX[tab].data[])
+
+`id` - the ID of the device to which the data is addressed
+
+`address` - the address of the first coil/register
+
+`count` - the number of data to read/write
+
+`*buf` - buffer containing the data to be transmitted
+
+`len` - the number of data from the buffer to transmit
+
+#### Example of use
+
+```c
+// First command - Read Coil_R from the device with ID=100 from address 0 to 9 inclusive
+mbus_master_prepare_Read_Coil_R(0, 100, 0, 10);
+
+// Second command - Read Reg_R from device with ID=120 from address 3 to 5 inclusive
+mbus_master_prepare_Read_Reg_R(1, 120, 3, 3);
+
+//Third command - Write data to Reg_RW of the device with ID=34 starting from address 10
+uint16_t data[] = {0x2B10, 0xC63F, 0xA300, 0x897C, 0x0008};
+mbus_master_prepare_Write_Reg_RW(2, 34, 10, data, 5);
+```
