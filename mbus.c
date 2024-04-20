@@ -803,7 +803,7 @@ void mbus_exec_Write_Reg_RW(void) {
 
 	// Update register values
 	for(uint8_t x = 0; x<((mbus_RX.data[2]-7) / 2); x++) {
-		mbus.Coil_RW[x + mbus_RX.data[4]] = (mbus_RX.data[(x*2)+5] << 8) + mbus_RX.data[(x*2)+6];
+		mbus.Reg_RW[x + mbus_RX.data[4]] = (mbus_RX.data[(x*2)+5] << 8) + mbus_RX.data[(x*2)+6];
 	}
 }
 
