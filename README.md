@@ -332,22 +332,22 @@ void exec_YOUR_FUNCTION(void) {
 ```c
 switch(function_code) {
 	case Read_Coil_R:
-		if((mbus_RX.data[4] + mbus_RX.data[2] - 7) <= MBUS_COIL_R_COUNT) mbus_exec_Read_Coil_R();
+		if((mbus_RX.data[4] + mbus_RX.data[5]) <= MBUS_COIL_R_COUNT) mbus_exec_Read_Coil_R();
 		break;
 	case Read_Coil_RW:
-		if((mbus_RX.data[4] + mbus_RX.data[2] - 7) <= MBUS_COIL_RW_COUNT) mbus_exec_Read_Coil_RW();
+		if((mbus_RX.data[4] + mbus_RX.data[5]) <= MBUS_COIL_RW_COUNT) mbus_exec_Read_Coil_RW();
 		break;
 	case Read_Reg_R:
-		if((mbus_RX.data[4] + mbus_RX.data[2] - 7) <= MBUS_REG_R_COUNT) mbus_exec_Read_Reg_R();
+		if((mbus_RX.data[4] + mbus_RX.data[5]) <= MBUS_REG_R_COUNT) mbus_exec_Read_Reg_R();
 		break;
 	case Read_Reg_RW:
-		if((mbus_RX.data[4] + mbus_RX.data[2] - 7) <= MBUS_REG_RW_COUNT) mbus_exec_Read_Reg_RW();
+		if((mbus_RX.data[4] + mbus_RX.data[5]) <= MBUS_REG_RW_COUNT) mbus_exec_Read_Reg_RW();
 		break;
 	case Write_Coil_RW:
 		if((mbus_RX.data[4] + mbus_RX.data[2] - 7) <= MBUS_COIL_RW_COUNT) mbus_exec_Write_Coil_RW();
 		break;
 	case Write_Reg_RW:
-		if((mbus_RX.data[4] + mbus_RX.data[2] - 7) <= MBUS_REG_RW_COUNT) mbus_exec_Write_Reg_RW();
+		if((mbus_RX.data[4] + mbus_RX.data[2] - 7) <= MBUS_REG_RW_COUNT * 2) mbus_exec_Write_Reg_RW();
 		break;
 	/*
 	 * You can add here your functions
@@ -360,7 +360,7 @@ switch(function_code) {
 	}
 ```
 
-In this case code `if((mbus_RX.data[4] + mbus_RX.data[2] - 7) <= MBUS_COIL_R_COUNT)` checks if the requested operation does not exceed the bounds of the data array.
+In this case code `if((mbus_RX.data[4] + mbus_RX.data[5]) <= MBUS_COIL_R_COUNT)` or `if((mbus_RX.data[4] + mbus_RX.data[2] - 7) <= MBUS_REG_RW_COUNT * 2)` checks if the requested operation does not exceed the bounds of the data array.
 
 **4. Prepare a function that will prepare the data for transmission.**
 ```c
